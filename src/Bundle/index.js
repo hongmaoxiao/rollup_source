@@ -1,5 +1,6 @@
-import { resolve } from 'path';
+import { resolve, sep } from 'path';
 import { readFile } from 'sander';
+import MagicString from 'magic-string';
 import { generate } from 'escodegen';
 import { hasOwnProp } from '../utils/object';
 import { sequence } from '../utils/promise';
@@ -7,7 +8,8 @@ import Module from '../Module/index';
 
 export default class Bundle {
   constructor ( options ) {
-    this.entryPath = resolve( options.entry );
+    this.base = options.base;
+    this.entryPath = resolve( this.base, options.entry );
     this.entryModule = null;
 
     this.modulePromises = {};
@@ -15,6 +17,10 @@ export default class Bundle {
 
 		// this will store the top-level AST nodes we import
     this.body = [];
+
+		// this will store per-module names, and enable deconflicting
+    this.names = {};
+    this.usedNames = {};
   }
 
   collect () {
@@ -38,6 +44,8 @@ export default class Bundle {
           return module;
         });
     }
+
+    return this.modulePromises[ path ];
   }
 
   build () {
@@ -63,12 +71,51 @@ export default class Bundle {
   }
 
   generate () {
+    const bundle = new MagicString.Bundle();
+
+    this.body.forEach(statement => {
+      bundle.addSource(statement._source);
+    })
     return {
-      code: generate({
-        type: 'Program',
-        body: this.body
-      }),
-      map: null // TODO...
+      code: bundle.toString(),
+      map: null // TODO use bundle.generateMap()
     };
+  }
+
+  getName(module, localName) {
+    if (!hasOwnProp.call(this.names, module.path)) {
+      this.names[module.path] = {}
+    }
+
+    const moduleNames = this.names[module.path];
+
+    if (!moduleNames) {
+      throw new Error(`Could not get name for ${module.relativePath}:${localName}`);
+    }
+
+    return moduleNames[localName];
+  }
+
+  suggestName(module, localName, globalName) {
+    if (!hasOwnProp.call(this.names, module.path)) {
+      this.names[module.path] = {}
+    }
+    
+    const moduleNames = this.names[module.path];
+
+    if (!hasOwnProp.call(moduleNames, globalName)) {
+      const relativePathParts = module.relativePath.split( sep );
+
+      while (hasOwnProp.call(this.usedNames, globalName) && relativePathParts.length) {
+        globalName = relativePathParts.pop() + `__${globalName}`;
+      }
+
+      while (hasOwnProp.call(this.usedNames, globalName)) {
+        globalName = `_${globalName}`;
+      }
+
+      this.usedNames[globalName] = true;
+      moduleNames[localName] = globalName;
+    }
   }
 }
