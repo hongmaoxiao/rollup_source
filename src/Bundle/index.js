@@ -89,44 +89,7 @@ export default class Bundle {
 
     return {
       code: magicString.toString(),
-      map: null // TODO use magicString.generateMap()
+      map: magicString.generateMap({})
     };
-  }
-
-  getName(module, localName) {
-    if (!hasOwnProp.call(this.names, module.path)) {
-      this.names[module.path] = {}
-    }
-
-    const moduleNames = this.names[module.path];
-
-    if (!moduleNames) {
-      throw new Error(`Could not get name for ${module.relativePath}:${localName}`);
-    }
-
-    return moduleNames[localName];
-  }
-
-  suggestName(module, localName, globalName) {
-    if (!hasOwnProp.call(this.names, module.path)) {
-      this.names[module.path] = {}
-    }
-    
-    const moduleNames = this.names[module.path];
-
-    if (!hasOwnProp.call(moduleNames, globalName)) {
-      const relativePathParts = module.relativePath.split( sep );
-
-      while (hasOwnProp.call(this.usedNames, globalName) && relativePathParts.length) {
-        globalName = relativePathParts.pop() + `__${globalName}`;
-      }
-
-      while (hasOwnProp.call(this.usedNames, globalName)) {
-        globalName = `_${globalName}`;
-      }
-
-      this.usedNames[globalName] = true;
-      moduleNames[localName] = globalName;
-    }
   }
 }
